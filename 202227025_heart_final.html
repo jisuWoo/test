@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    
+    canvas {
+      border: 1px solid #000;
+    }
+
+    #info {
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+    
+    #box{
+      float: right;
+      width: 498px;
+      position: relative;
+    }
+
+    #all{
+      position: relative;
+      width: 1020px;
+    }
+  </style>
+</head>
+
+<body onload="draw()" onmousedown="startDragging(event)" onmousemove="drag(event)" onmouseup="stopDragging()">
+  <div id = "all">
+  <canvas id="c" width="500" height="500"></canvas>
+    <div id = "box">
+      <div id="info"></div>
+        <div id="sliders">
+          <label for="scaleX">가로:</label>
+          <input type="range" id="scaleX" min="0.1" max="15" step="0.1" value="2" oninput="updateScaleX(this.value)">
+          <br>
+          <label for="scaleY">세로:</label>
+          <input type="range" id="scaleY" min="0.1" max="15" step="0.1" value="2" oninput="updateScaleY(this.value)">
+      </div>
+      <div id="Description">
+        <br>
+        <b>하트 설명</b><br>
+        하트를 그리는 코드입니다.<br>
+        하트를 이동시킬려면 하트를 드래그해주세요.<br>
+        하트를 회전시킬려면 마우스 휠를 돌려주세요.<br>
+        하트를 크기를 바꿀려면 상단의 슬라이더를 조정해주세요.<br>
+      </div>
+    </div>
+  </div>
+  <script>
+    var c = document.getElementById("c");
+    var ctx = c.getContext("2d");
+
+    var start = 0;
+    var stop = Math.PI * 2; // radians
+
+    var arr = [];
+    var resolution = 180; // how many points to connect
+    var step = stop / resolution; // angle increment per point
+    var scaleX = 2;
+    var scaleY = 2;
+    var isDragging = false;
+    var offsetX, offsetY, rotationAngle = 0;
+    var heart = { x: 180, y: 150 };
+
+    function draw() {
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.beginPath();
+      for (var i = 0; i < resolution + 1; i++) {
+        var angle = step * i;
+        var point = {
+          x: (16 * (Math.sin(angle) ** 3)),
+          y: -(13 * Math.cos(angle) - 5 * Math.cos(2 * angle) - 2 * Math.cos(3 * angle) - Math.cos(4 * angle))
+        };
+
+        // 이동, 크기, 회전
+        var pointMatrix = [
+          [point.x],
+          [point.y],
+          [1]
+        ];
+
+        var compositionMatrix = hwCompositionMatrix(heart.x, heart.y, scaleX, scaleY, -rotationAngle);
+        var hresult = hwMatrixMultiply(compositionMatrix, pointMatrix);
+
+        if (i !== 0) ctx.lineTo(hresult[0][0], hresult[1][0]);
+        else ctx.moveTo(hresult[0][0], hresult[1][0]);
+
+        arr.push(point);
+      }
+      ctx.stroke();
+      ctx.fillStyle = "red"; // 색상 설정
+      ctx.fill(); // 도형 채우기
+      
+      // 정보 업데이트
+      updateInfo();
+    }
+
+    function updateInfo() {
+      var infoElement = document.getElementById("info");
+      infoElement.innerHTML = `
+        <b>하트 정보</b><br>
+        가로: ${scaleX.toFixed(1)}<br>
+        세로: ${scaleY.toFixed(1)}<br>
+        회전각: ${rotationAngle.toFixed()} 도<br>
+        하트 X위치: ${heart.x.toFixed()}<br>
+        하트 Y위치: ${heart.y.toFixed()}<br>
+      `;
+    }
+
+    function hwMatrixMultiply(matrix1, matrix2) {
+      var result = [];
+      for (var i = 0; i < matrix1.length; i++) {
+        result[i] = [];
+        for (var j = 0; j < matrix2[0].length; j++) {
+          var sum = 0;
+          for (var k = 0; k < matrix1[0].length; k++) {
+            sum += matrix1[i][k] * matrix2[k][j];
+          }
+          result[i][j] = sum;
+        }
+      }
+      return result;
+    }
+
+    function hwTranslateMatrix(tx, ty) {
+      var translationMatrix = [
+        [1, 0, tx], // tx는 x 방향으로의 이동량
+        [0, 1, ty], // ty는 y 방향으로의 이동량
+        [0, 0, 1]
+      ];
+
+      return translationMatrix;
+    }
+
+    function hwScaleMatrix(sx, sy) {
+      var scaleMatrix = [
+        [sx, 0, 0], // sx는 x 방향으로의 크기 조정 비율
+        [0, sy, 0], // sy는 y 방향으로의 크기 조정 비율
+        [0, 0, 1]
+      ];
+
+      return scaleMatrix;
+    }
+
+    function hwRotationMatrix(degrees) {
+      var theta = degrees * Math.PI / 180;
+
+      var cos = Math.cos(theta);
+      var sin = Math.sin(theta);
+
+      var rotationMatrix = [
+        [cos, -sin, 0], // theta는 각도
+        [sin, cos, 0],
+        [0, 0, 1]
+      ];
+
+      return rotationMatrix;
+    }
+
+    function hwCompositionMatrix(tx, ty, sx, sy, degrees) {
+      var compositionMatrix = hwMatrixMultiply(hwTranslateMatrix(tx, ty), hwMatrixMultiply(hwRotationMatrix(degrees), hwScaleMatrix(sx, sy)));
+
+      return compositionMatrix;
+    }
+
+    function startDragging(e) {
+      var mouseX = e.clientX - c.getBoundingClientRect().left;
+      var mouseY = e.clientY - c.getBoundingClientRect().top;
+
+      // Check if the mouse is within the bounds of the heart
+      if (
+        mouseX >= heart.x - scaleX * 20 && mouseX <= heart.x + scaleX * 20 &&
+        mouseY >= heart.y - scaleY * 20 && mouseY <= heart.y + scaleY * 20
+      ) {
+        isDragging = true;
+        offsetX = mouseX - heart.x;
+        offsetY = mouseY - heart.y;
+      }
+    }
+
+    function drag(e) {
+      if (isDragging) {
+        heart.x = e.clientX - offsetX;
+        heart.y = e.clientY - offsetY;
+        draw();
+      }
+    }
+
+    function stopDragging() {
+      isDragging = false;
+    }
+
+    // 마우스 휠 이벤트로 회전 각도 조절
+    c.addEventListener("wheel", function (e) {
+      rotationAngle += e.deltaY / 10; // 회전 각도를 휠의 deltaY 값에 따라 조절
+      draw();
+    });
+
+    function updateScaleX(value) {
+      scaleX = parseFloat(value);
+      draw();
+    }
+
+    function updateScaleY(value) {
+      scaleY = parseFloat(value);
+      draw();
+    }
+  </script>
+</body>
+</html>
